@@ -75,41 +75,38 @@ def _handle_message(client: NewClient, msg: MessageEv):
         is_from_me, is_group, (text or "<empty>")[:60],
     )
 
-    if not text:
+    # Only process: non-group, from-me (user messaging themselves), with text
+    if is_group or not is_from_me or not text:
         return
 
-    # --- TEMPORARY: accept ALL messages with text for debugging ---
-    log.info("PASSED FILTERS | processing message")
-    sender = str(sender.User)
-
+    log.info("Processing message: %s", text[:80])
+    sender_id = str(sender.User)
     cmd = text.lower()
 
     if cmd in ("/new", "/reset"):
-        bridge.reset_session(sender)
-        client.reply_message("Session reset. Send a new instruction to start fresh.", msg)
+        bridge.reset_session(sender_id)
+        client.send_message(chat, "Session reset. Send a new instruction to start fresh.")
         return
 
     if cmd == "/status":
         with _busy_lock:
             is_busy = _busy
-        client.reply_message(
+        client.send_message(
+            chat,
             "Still working on it..." if is_busy else "Idle. Send me something to do!",
-            msg,
         )
         return
 
     with _busy_lock:
         if _busy:
-            client.reply_message(
-                "Still working on the previous task. Wait or send /status.", msg
-            )
+            client.send_message(chat, "Still working on the previous task. Wait or send /status.")
             return
         _busy = True
 
-    client.reply_message("Got it, working on it...", msg)
+    client.send_message(chat, "Got it, working on it...")
 
     threading.Thread(
-        target=_process_message, args=(client, chat, sender, text), daemon=True
+        target=_process_message, args=(client, chat, sender_id, text), daemon=True
     ).start()
 
 
@@ -118,10 +115,10 @@ def _process_message(client: NewClient, chat, sender: str, text: str):
     try:
         log.info("Processing: %s", text[:100])
         summary = bridge.send_message(sender, text)
-        client.send_message(chat, text=f"Done!\n\n{summary}")
+        client.send_message(chat, f"Done!\n\n{summary}")
     except Exception as e:
         log.exception("Error processing message")
-        client.send_message(chat, text=f"Error: {str(e)[:300]}")
+        client.send_message(chat, f"Error: {str(e)[:300]}")
     finally:
         with _busy_lock:
             _busy = False
