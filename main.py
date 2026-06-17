@@ -22,6 +22,11 @@ _busy = False
 _busy_lock = threading.Lock()
 
 
+def _is_self_chat(chat_str: str) -> bool:
+    """Check if this is the 'Message yourself' / 'Note to self' chat."""
+    return MY_NUMBER in chat_str
+
+
 def _extract_text(msg: MessageEv) -> str:
     """Pull text out of a regular message or a quoted/reply message."""
     text = msg.Message.conversation or ""
@@ -50,18 +55,25 @@ def on_connected(_client: NewClient, _evt: ConnectedEv):
 def on_message(client: NewClient, msg: MessageEv):
     global _busy
 
-    if msg.Info.MessageSource.IsFromMe:
+    chat = msg.Info.MessageSource.Chat
+    chat_str = str(chat)
+
+    # Only respond to messages in the "Note to self" chat (you messaging yourself).
+    # This is how you talk to the bot without it reacting to every conversation.
+    if MY_NUMBER and MY_NUMBER not in chat_str:
+        return
+
+    # Skip bot's own replies (the ones we send back)
+    if msg.Info.MessageSource.IsFromMe and not _is_self_chat(chat_str):
         return
 
     sender = str(msg.Info.MessageSource.Sender)
-    chat = msg.Info.MessageSource.Chat
-
-    if MY_NUMBER and MY_NUMBER not in sender:
-        return
 
     text = _extract_text(msg)
     if not text:
         return
+
+    log.info("Message in self-chat from %s: %s", sender, text[:80])
 
     cmd = text.lower()
 
