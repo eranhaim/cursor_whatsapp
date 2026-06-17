@@ -75,17 +75,11 @@ def _handle_message(client: NewClient, msg: MessageEv):
         is_from_me, is_group, (text or "<empty>")[:60],
     )
 
-    # Skip group chats
-    if is_group:
-        return
-
-    # Only process messages the user sends (not incoming from others)
-    if not is_from_me:
-        return
-
     if not text:
         return
 
+    # --- TEMPORARY: accept ALL messages with text for debugging ---
+    log.info("PASSED FILTERS | processing message")
     sender = str(sender.User)
 
     cmd = text.lower()
