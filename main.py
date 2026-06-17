@@ -26,11 +26,6 @@ _busy = False
 _busy_lock = threading.Lock()
 
 
-def _is_self_chat(chat_str: str) -> bool:
-    """Check if this is the 'Message yourself' / 'Note to self' chat."""
-    return MY_NUMBER in chat_str
-
-
 def _extract_text(msg: MessageEv) -> str:
     """Pull text out of a regular message or a quoted/reply message."""
     text = msg.Message.conversation or ""
@@ -67,26 +62,35 @@ def on_message(client: NewClient, msg: MessageEv):
 def _handle_message(client: NewClient, msg: MessageEv):
     global _busy
 
-    log.info("EVENT RECEIVED (raw)")
-
     chat = msg.Info.MessageSource.Chat
-    chat_str = str(chat)
-    sender = str(msg.Info.MessageSource.Sender)
+    sender = msg.Info.MessageSource.Sender
     is_from_me = msg.Info.MessageSource.IsFromMe
     is_group = msg.Info.MessageSource.IsGroup
+    chat_user = chat.User
+    sender_user = sender.User
 
     text = _extract_text(msg)
 
     log.info(
-        "RAW | chat=%s | sender=%s | from_me=%s | group=%s | text=%s",
-        chat_str, sender, is_from_me, is_group, (text or "<empty>")[:60],
+        "RAW | chat_user=%s chat_server=%s | sender_user=%s | from_me=%s | group=%s | text=%s",
+        chat_user, chat.Server, sender_user, is_from_me, is_group, (text or "<empty>")[:60],
     )
 
-    if MY_NUMBER and MY_NUMBER not in chat_str:
+    # Only respond in the "Note to self" chat:
+    # it's a 1:1 chat (not a group) where both chat and sender are you.
+    if is_group:
+        return
+
+    if MY_NUMBER and MY_NUMBER not in chat_user:
+        return
+
+    if not is_from_me:
         return
 
     if not text:
         return
+
+    sender = str(sender)
 
     cmd = text.lower()
 
