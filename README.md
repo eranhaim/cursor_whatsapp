@@ -42,7 +42,7 @@ Edit `.env`:
 | Variable | Description |
 |---|---|
 | `CURSOR_API_KEY` | Your Cursor API key from the dashboard |
-| `CURSOR_WORKSPACE_PATH` | Absolute path to the project Cursor should work on |
+| `CURSOR_BASE_PATH` | Root directory the agent works from (e.g. your Desktop). It can create and switch between project folders under here. |
 | `CURSOR_MODEL` | Model to use (default: `composer-2.5`) |
 | `MY_WHATSAPP_NUMBER` | Your phone number, digits only with country code (e.g. `972501234567`). Optional, restricts access. |
 

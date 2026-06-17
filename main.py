@@ -1,6 +1,7 @@
 import os
 import threading
 import logging
+import segno
 from dotenv import load_dotenv
 from neonize.client import NewClient
 from neonize.events import MessageEv, ConnectedEv, event
@@ -13,7 +14,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-wa = NewClient("cursor_bridge", database="./session.db")
+wa = NewClient("cursor_bridge")
 bridge = CursorBridge()
 
 MY_NUMBER = os.environ.get("MY_WHATSAPP_NUMBER", "")
@@ -36,9 +37,20 @@ def _extract_text(msg: MessageEv) -> str:
     return text.strip()
 
 
+QR_PATH = os.path.join(os.path.dirname(__file__), "qr.png")
+
+
+@wa.qr
+def on_qr(_client: NewClient, qr_data: bytes):
+    segno.make_qr(qr_data).save(QR_PATH, scale=10)
+    log.info("QR code saved to %s  -- open it and scan with WhatsApp", QR_PATH)
+
+
 @wa.event(ConnectedEv)
 def on_connected(_client: NewClient, _evt: ConnectedEv):
     log.info("Connected to WhatsApp!")
+    if os.path.exists(QR_PATH):
+        os.remove(QR_PATH)
 
 
 @wa.event(MessageEv)
@@ -105,7 +117,7 @@ def _process_message(client: NewClient, chat, sender: str, text: str):
 
 if __name__ == "__main__":
     log.info("Starting WhatsApp-Cursor bridge...")
-    log.info("Workspace: %s", bridge.workspace)
+    log.info("Base path: %s", bridge.base_path)
     log.info("Scan the QR code with WhatsApp to connect (first time only)")
     wa.connect()
     event.wait()

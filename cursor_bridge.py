@@ -17,12 +17,13 @@ class CursorBridge:
     """Manages Cursor agent sessions per sender.
 
     Each sender maps to one persistent agent that can be resumed across
-    WhatsApp messages, preserving full conversation context.
+    WhatsApp messages, preserving full conversation context. The agent
+    runs from a base directory so it can create and switch between project folders.
     """
 
     def __init__(self):
         self.api_key = os.environ["CURSOR_API_KEY"]
-        self.workspace = os.environ.get("CURSOR_WORKSPACE_PATH", os.getcwd())
+        self.base_path = os.environ.get("CURSOR_BASE_PATH", os.getcwd())
         self.model = os.environ.get("CURSOR_MODEL", "composer-2.5")
         self._sessions: dict[str, str] = {}  # sender -> agent_id
         self._lock = threading.Lock()
@@ -58,7 +59,7 @@ class CursorBridge:
         with Agent.create(
             model=self.model,
             api_key=self.api_key,
-            local=LocalAgentOptions(cwd=self.workspace),
+            local=LocalAgentOptions(cwd=self.base_path),
         ) as agent:
             self._save_session(sender, agent.agent_id)
             log.info("Created agent %s for %s", agent.agent_id, sender)

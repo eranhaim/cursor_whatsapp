@@ -1,5 +1,10 @@
 .env
+*.pem
 session.db
+cursor_bridge
+cursor_bridge.db
+qr.png
+README_OF_VOICE.md
 __pycache__/
 *.pyc
 *.pyo
