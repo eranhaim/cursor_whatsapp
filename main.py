@@ -24,16 +24,9 @@ _busy_lock = threading.Lock()
 
 def _extract_text(msg: MessageEv) -> str:
     """Pull text out of a regular message or a quoted/reply message."""
-    text = ""
-    try:
-        text = msg.message.conversation or ""
-    except (AttributeError, TypeError):
-        pass
-    if not text:
-        try:
-            text = msg.message.extendedTextMessage.text or ""
-        except (AttributeError, TypeError):
-            pass
+    text = msg.Message.conversation or ""
+    if not text and msg.Message.extendedTextMessage.text:
+        text = msg.Message.extendedTextMessage.text
     return text.strip()
 
 
@@ -57,11 +50,11 @@ def on_connected(_client: NewClient, _evt: ConnectedEv):
 def on_message(client: NewClient, msg: MessageEv):
     global _busy
 
-    if msg.info.message_source.is_from_me:
+    if msg.Info.MessageSource.IsFromMe:
         return
 
-    sender = str(msg.info.message_source.sender)
-    chat = msg.info.message_source.chat
+    sender = str(msg.Info.MessageSource.Sender)
+    chat = msg.Info.MessageSource.Chat
 
     if MY_NUMBER and MY_NUMBER not in sender:
         return
