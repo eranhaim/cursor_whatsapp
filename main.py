@@ -24,6 +24,8 @@ bridge = CursorBridge()
 MY_NUMBER = os.environ.get("MY_WHATSAPP_NUMBER", "")
 _busy = False
 _busy_lock = threading.Lock()
+_sent_ids: set[str] = set()
+_sent_lock = threading.Lock()
 
 
 def _extract_text(msg: MessageEv) -> str:
@@ -32,6 +34,15 @@ def _extract_text(msg: MessageEv) -> str:
     if not text and msg.Message.extendedTextMessage.text:
         text = msg.Message.extendedTextMessage.text
     return text.strip()
+
+
+def _send(client: NewClient, chat, text: str):
+    """Send a message and track its ID so we don't react to our own replies."""
+    resp = client.send_message(chat, text)
+    with _sent_lock:
+        _sent_ids.add(resp.ID)
+        if len(_sent_ids) > 200:
+            _sent_ids.clear()
 
 
 QR_PATH = os.path.join(os.path.dirname(__file__), "qr.png")
@@ -75,8 +86,18 @@ def _handle_message(client: NewClient, msg: MessageEv):
         is_from_me, is_group, (text or "<empty>")[:60],
     )
 
-    # Only process: non-group, from-me (user messaging themselves), with text
+    # Skip: groups, messages from others, empty text
     if is_group or not is_from_me or not text:
+        return
+
+    # Skip bot's own replies (prevent infinite loop)
+    msg_id = msg.Info.ID
+    with _sent_lock:
+        if msg_id in _sent_ids:
+            return
+
+    # Only respond in the self-chat (chat == sender = your own JID)
+    if chat.User != sender.User:
         return
 
     log.info("Processing message: %s", text[:80])
@@ -85,25 +106,25 @@ def _handle_message(client: NewClient, msg: MessageEv):
 
     if cmd in ("/new", "/reset"):
         bridge.reset_session(sender_id)
-        client.send_message(chat, "Session reset. Send a new instruction to start fresh.")
+        _send(client, chat, "Session reset. Send a new instruction to start fresh.")
         return
 
     if cmd == "/status":
         with _busy_lock:
             is_busy = _busy
-        client.send_message(
-            chat,
+        _send(
+            client, chat,
             "Still working on it..." if is_busy else "Idle. Send me something to do!",
         )
         return
 
     with _busy_lock:
         if _busy:
-            client.send_message(chat, "Still working on the previous task. Wait or send /status.")
+            _send(client, chat, "Still working on the previous task. Wait or send /status.")
             return
         _busy = True
 
-    client.send_message(chat, "Got it, working on it...")
+    _send(client, chat, "Got it, working on it...")
 
     threading.Thread(
         target=_process_message, args=(client, chat, sender_id, text), daemon=True
@@ -115,10 +136,10 @@ def _process_message(client: NewClient, chat, sender: str, text: str):
     try:
         log.info("Processing: %s", text[:100])
         summary = bridge.send_message(sender, text)
-        client.send_message(chat, f"Done!\n\n{summary}")
+        _send(client, chat, f"Done!\n\n{summary}")
     except Exception as e:
         log.exception("Error processing message")
-        client.send_message(chat, f"Error: {str(e)[:300]}")
+        _send(client, chat, f"Error: {str(e)[:300]}")
     finally:
         with _busy_lock:
             _busy = False
