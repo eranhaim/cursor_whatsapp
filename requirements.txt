@@ -1,0 +1,3 @@
+cursor-sdk
+neonize
+python-dotenv
