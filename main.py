@@ -57,23 +57,25 @@ def on_message(client: NewClient, msg: MessageEv):
 
     chat = msg.Info.MessageSource.Chat
     chat_str = str(chat)
-
-    # Only respond to messages in the "Note to self" chat (you messaging yourself).
-    # This is how you talk to the bot without it reacting to every conversation.
-    if MY_NUMBER and MY_NUMBER not in chat_str:
-        return
-
-    # Skip bot's own replies (the ones we send back)
-    if msg.Info.MessageSource.IsFromMe and not _is_self_chat(chat_str):
-        return
-
     sender = str(msg.Info.MessageSource.Sender)
+    is_from_me = msg.Info.MessageSource.IsFromMe
+    is_group = msg.Info.MessageSource.IsGroup
 
     text = _extract_text(msg)
-    if not text:
+
+    log.info(
+        "RAW EVENT | chat=%s | sender=%s | from_me=%s | group=%s | text=%s",
+        chat_str, sender, is_from_me, is_group, (text or "<empty>")[:60],
+    )
+    log.info("MY_NUMBER=%s | in_chat=%s", MY_NUMBER, MY_NUMBER in chat_str if MY_NUMBER else "no_filter")
+
+    if MY_NUMBER and MY_NUMBER not in chat_str:
+        log.info("SKIPPED: chat does not match MY_NUMBER")
         return
 
-    log.info("Message in self-chat from %s: %s", sender, text[:80])
+    if not text:
+        log.info("SKIPPED: no text content")
+        return
 
     cmd = text.lower()
 
