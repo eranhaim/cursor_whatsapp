@@ -66,31 +66,27 @@ def _handle_message(client: NewClient, msg: MessageEv):
     sender = msg.Info.MessageSource.Sender
     is_from_me = msg.Info.MessageSource.IsFromMe
     is_group = msg.Info.MessageSource.IsGroup
-    chat_user = chat.User
-    sender_user = sender.User
 
     text = _extract_text(msg)
 
     log.info(
-        "RAW | chat_user=%s chat_server=%s | sender_user=%s | from_me=%s | group=%s | text=%s",
-        chat_user, chat.Server, sender_user, is_from_me, is_group, (text or "<empty>")[:60],
+        "RAW | chat_user=%s chat_server=%s | sender_user=%s sender_server=%s | from_me=%s | group=%s | text=%s",
+        chat.User, chat.Server, sender.User, sender.Server,
+        is_from_me, is_group, (text or "<empty>")[:60],
     )
 
-    # Only respond in the "Note to self" chat:
-    # it's a 1:1 chat (not a group) where both chat and sender are you.
+    # Skip group chats
     if is_group:
         return
 
-    if MY_NUMBER and MY_NUMBER not in chat_user:
-        return
-
+    # Only process messages the user sends (not incoming from others)
     if not is_from_me:
         return
 
     if not text:
         return
 
-    sender = str(sender)
+    sender = str(sender.User)
 
     cmd = text.lower()
 
