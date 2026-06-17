@@ -12,6 +12,24 @@ SUMMARY_INSTRUCTION = (
     "followed by a 2-sentence summary of what you did.]"
 )
 
+SYSTEM_PROMPT = """\
+You are a coding agent controlled via WhatsApp messages. You run on an EC2 instance.
+
+Environment:
+- Base directory: {base_path}
+- Each subdirectory is a separate git project (cloned from GitHub).
+- You have SSH access to GitHub for clone/push operations.
+
+Workflow rules:
+- When asked to work on a project, `cd` into its subdirectory first.
+- After making changes, ALWAYS commit and push to the remote so the user can see results.
+- Use clear, descriptive commit messages.
+- If the user asks to clone a repo, use `git clone` into the base directory.
+- If you create a new project from scratch, `git init` it and push to GitHub if asked.
+- Keep responses concise — summaries go to WhatsApp with limited screen space.
+- List available projects with `ls {base_path}` when asked.
+"""
+
 
 class CursorBridge:
     """Manages Cursor agent sessions per sender.
@@ -25,12 +43,17 @@ class CursorBridge:
         self.api_key = os.environ["CURSOR_API_KEY"]
         self.base_path = os.environ.get("CURSOR_BASE_PATH", os.getcwd())
         self.model = os.environ.get("CURSOR_MODEL", "composer-2.5")
+        self.system_prompt = SYSTEM_PROMPT.format(base_path=self.base_path)
         self._sessions: dict[str, str] = {}  # sender -> agent_id
         self._lock = threading.Lock()
 
     def send_message(self, sender: str, message: str) -> str:
-        augmented = message + SUMMARY_INSTRUCTION
         agent_id = self._get_session(sender)
+        is_new = agent_id is None
+
+        augmented = message + SUMMARY_INSTRUCTION
+        if is_new:
+            augmented = self.system_prompt + "\n\n---\n\n" + augmented
 
         try:
             if agent_id:
@@ -41,6 +64,7 @@ class CursorBridge:
                 raise
             log.warning("Retryable error, resetting session: %s", e.message)
             self.reset_session(sender)
+            augmented = self.system_prompt + "\n\n---\n\n" + message + SUMMARY_INSTRUCTION
             return self._create_and_send(sender, augmented)
 
     def reset_session(self, sender: str):

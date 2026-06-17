@@ -1,4 +1,5 @@
 import os
+import subprocess
 import threading
 import logging
 import segno
@@ -118,6 +119,30 @@ def _handle_message(client: NewClient, msg: MessageEv):
         )
         return
 
+    if cmd == "/projects":
+        _send(client, chat, _list_projects())
+        return
+
+    if cmd.startswith("/clone "):
+        repo_url = text[7:].strip()
+        _send(client, chat, f"Cloning {repo_url}...")
+        threading.Thread(
+            target=_clone_repo, args=(client, chat, repo_url), daemon=True
+        ).start()
+        return
+
+    if cmd == "/help":
+        _send(client, chat, (
+            "Commands:\n"
+            "/projects - list cloned repos\n"
+            "/clone <url> - clone a GitHub repo\n"
+            "/new - reset session\n"
+            "/status - check if busy\n"
+            "/help - this message\n\n"
+            "Or just send any instruction for the Cursor agent."
+        ))
+        return
+
     with _busy_lock:
         if _busy:
             _send(client, chat, "Still working on the previous task. Wait or send /status.")
@@ -129,6 +154,36 @@ def _handle_message(client: NewClient, msg: MessageEv):
     threading.Thread(
         target=_process_message, args=(client, chat, sender_id, text), daemon=True
     ).start()
+
+
+def _list_projects() -> str:
+    base = bridge.base_path
+    if not os.path.isdir(base):
+        return f"Base path {base} doesn't exist yet."
+    dirs = sorted(
+        d for d in os.listdir(base)
+        if os.path.isdir(os.path.join(base, d)) and not d.startswith(".")
+    )
+    if not dirs:
+        return "No projects yet. Use /clone <url> to add one."
+    return "Projects:\n" + "\n".join(f"• {d}" for d in dirs)
+
+
+def _clone_repo(client: NewClient, chat, repo_url: str):
+    try:
+        result = subprocess.run(
+            ["git", "clone", repo_url],
+            cwd=bridge.base_path,
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode == 0:
+            repo_name = repo_url.rstrip("/").split("/")[-1].replace(".git", "")
+            _send(client, chat, f"Cloned '{repo_name}' successfully!\n\n{_list_projects()}")
+        else:
+            _send(client, chat, f"Clone failed:\n{result.stderr[:300]}")
+    except Exception as e:
+        log.exception("Clone error")
+        _send(client, chat, f"Clone error: {e}")
 
 
 def _process_message(client: NewClient, chat, sender: str, text: str):
